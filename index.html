@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>📊 Real-time Sensor Dashboard (MPU6050 Random Data)</title>
+  <title>📊 Real-time Sensor Dashboard</title>
   <style>
     * {
       margin: 0;
@@ -45,6 +45,7 @@
       transition: all 0.3s ease;
       border-left: 3px solid transparent;
       font-weight: 500;
+      cursor: pointer;
     }
     
     nav a:hover, nav a.active { 
@@ -75,6 +76,29 @@
       color: #333;
       font-size: 2em;
       margin-bottom: 0.5em;
+    }
+    
+    .connection-status {
+      padding: 1em;
+      margin-bottom: 2em;
+      border-radius: 10px;
+      text-align: center;
+      font-weight: 600;
+    }
+    
+    .status-connected {
+      background: linear-gradient(135deg, #4CAF50, #45a049);
+      color: white;
+    }
+    
+    .status-disconnected {
+      background: linear-gradient(135deg, #f44336, #d32f2f);
+      color: white;
+    }
+    
+    .status-loading {
+      background: linear-gradient(135deg, #ff9800, #f57c00);
+      color: white;
     }
     
     .stats-cards {
@@ -209,6 +233,32 @@
       background-color: #f44336;
     }
     
+    .api-config {
+      background: white;
+      padding: 1.5em;
+      border-radius: 10px;
+      margin-bottom: 2em;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .api-config input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      margin: 5px 0;
+    }
+    
+    .api-config button {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    
     @keyframes pulse {
       0% { opacity: 1; }
       50% { opacity: 0.5; }
@@ -245,14 +295,34 @@
 
 <nav>
   <h2>🎛️ Sensor Dashboard</h2>
-  <a href="#" onclick="showPage('log')" class="active" id="log-nav">📋 Data Log</a>
-  <a href="#" onclick="showPage('graph')" id="graph-nav">📈 Live Graphs</a>
-  <a href="#" onclick="showPage('stats')" id="stats-nav">📊 Statistics</a>
+  <a onclick="showPage('config')" class="active" id="config-nav">⚙️ API Config</a>
+  <a onclick="showPage('log')" id="log-nav">📋 Data Log</a>
+  <a onclick="showPage('graph')" id="graph-nav">📈 Live Graphs</a>
+  <a onclick="showPage('stats')" id="stats-nav">📊 Statistics</a>
 </nav>
 
 <main>
+  <!-- API Configuration -->
+  <section id="config-page">
+    <div class="page-header">
+      <h2>⚙️ API Configuration</h2>
+      <p>Configure your backend API endpoint</p>
+    </div>
+    
+    <div class="api-config">
+      <h3>Backend API URL</h3>
+      <input type="url" id="api-url" placeholder="https://your-render-app.onrender.com" value="">
+      <button onclick="updateApiUrl()">Update API URL</button>
+      <p><small>Enter your Render backend URL (without trailing slash)</small></p>
+    </div>
+    
+    <div class="connection-status" id="connection-status">
+      <span>🔄 Testing connection...</span>
+    </div>
+  </section>
+
   <!-- Sensor Log Table -->
-  <section id="log-page">
+  <section id="log-page" style="display:none">
     <div class="page-header">
       <h2>📋 Sensor Data Log</h2>
       <p>Real-time MPU6050 accelerometer and gyroscope readings</p>
@@ -287,7 +357,7 @@
         </tr>
       </thead>
       <tbody id="log-table-body">
-        <tr><td colspan="13" class="loading">Loading sensor data...</td></tr>
+        <tr><td colspan="13" class="loading">Configure API endpoint first</td></tr>
       </tbody>
     </table>
     
@@ -361,15 +431,27 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const apiBase = "";
+  let apiBaseUrl = '';
   let allData = [];
   let currentPage = 1;
   const rowsPerPage = 10;
   let maxPages = 1;
   let charts = {};
+  let connectionInterval = null;
+
+  // Load saved API URL
+  window.addEventListener('load', () => {
+    const saved = localStorage.getItem('apiUrl');
+    if (saved) {
+      document.getElementById('api-url').value = saved;
+      apiBaseUrl = saved;
+      testConnection();
+    }
+  });
 
   function showPage(id) {
     // Hide all pages
+    document.getElementById("config-page").style.display = "none";
     document.getElementById("log-page").style.display = "none";
     document.getElementById("graph-page").style.display = "none";
     document.getElementById("stats-page").style.display = "none";
@@ -382,9 +464,65 @@
     document.getElementById(id + "-nav").classList.add("active");
   }
 
-  async function fetchAndUpdate() {
+  function updateApiUrl() {
+    const url = document.getElementById('api-url').value.trim();
+    if (!url) {
+      alert('Please enter a valid API URL');
+      return;
+    }
+    
+    // Remove trailing slash
+    apiBaseUrl = url.replace(/\/$/, '');
+    localStorage.setItem('apiUrl', apiBaseUrl);
+    
+    testConnection();
+  }
+
+  async function testConnection() {
+    const status = document.getElementById('connection-status');
+    status.className = 'connection-status status-loading';
+    status.innerHTML = '<span>🔄 Testing connection...</span>';
+
     try {
-      const res = await fetch(`${apiBase}/latest`);
+      const response = await fetch(`${apiBaseUrl}/api/health`);
+      const data = await response.json();
+      
+      if (response.ok && data.status === 'healthy') {
+        status.className = 'connection-status status-connected';
+        status.innerHTML = '<span>✅ Connected successfully!</span>';
+        startDataUpdates();
+      } else {
+        throw new Error('Health check failed');
+      }
+    } catch (error) {
+      status.className = 'connection-status status-disconnected';
+      status.innerHTML = '<span>❌ Connection failed. Please check your API URL.</span>';
+      console.error('Connection test failed:', error);
+    }
+  }
+
+  function startDataUpdates() {
+    // Clear any existing interval
+    if (connectionInterval) {
+      clearInterval(connectionInterval);
+    }
+
+    // Start fetching data
+    fetchAndUpdate();
+    updateGraphs();
+    
+    // Update every 2 seconds
+    connectionInterval = setInterval(() => {
+      fetchAndUpdate();
+      updateGraphs();
+    }, 2000);
+  }
+
+  async function fetchAndUpdate() {
+    if (!apiBaseUrl) return;
+
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/latest`);
       const latest = await res.json();
 
       // Update data array
@@ -411,8 +549,10 @@
   }
 
   async function updateStats() {
+    if (!apiBaseUrl) return;
+
     try {
-      const res = await fetch(`${apiBase}/stats`);
+      const res = await fetch(`${apiBaseUrl}/api/stats`);
       const stats = await res.json();
       
       document.getElementById("total-records").textContent = stats.total_records || 0;
@@ -465,8 +605,10 @@
   }
 
   async function updateGraphs() {
+    if (!apiBaseUrl) return;
+
     try {
-      const res = await fetch(`${apiBase}/latest`);
+      const res = await fetch(`${apiBaseUrl}/api/latest`);
       const data = await res.json();
       const labels = data.map(d => d.timestamp);
 
@@ -530,16 +672,6 @@
       console.error("Error updating graphs:", err);
     }
   }
-
-  // Initialize
-  fetchAndUpdate();
-  updateGraphs();
-
-  // Update data every 2 seconds
-  setInterval(() => {
-    fetchAndUpdate();
-    updateGraphs();
-  }, 2000);
 </script>
 </body>
 </html>
