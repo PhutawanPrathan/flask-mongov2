@@ -1,14 +1,18 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, jsonify
+from flask_cors import CORS
 from pymongo import MongoClient
 from datetime import datetime
 import threading
 import time
 import random
+import os
 
 app = Flask(__name__)
+# Enable CORS for all routes to allow frontend from different domain
+CORS(app, origins=["*"])
 
-# MongoDB
-MONGO_URI = "mongodb+srv://projectEE:ee707178@cluster0.ttq1nzx.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+# MongoDB connection
+MONGO_URI = os.environ.get('MONGO_URI', "mongodb+srv://projectEE:ee707178@cluster0.ttq1nzx.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 client = MongoClient(MONGO_URI)
 db = client["sensor_db"]
 sensor_collection = db["sensor_data"]
@@ -57,7 +61,7 @@ def generate_random_sensor_data():
             }
             
             sensor_collection.insert_one(sensor_data)
-            print(f"✅ Random sensor data generated and saved at {datetime.now().strftime('%H:%M:%S')}")
+            print(f"✅ Random sensor data generated at {datetime.now().strftime('%H:%M:%S')}")
             
         except Exception as e:
             print(f"❌ Error generating sensor data: {e}")
@@ -65,12 +69,17 @@ def generate_random_sensor_data():
         # Generate data every 2 seconds
         time.sleep(2)
 
-# === ROUTES ===
+# === API ROUTES ===
 @app.route("/")
-def index():
-    return render_template("index.html")
+def home():
+    """Health check endpoint"""
+    return jsonify({
+        "message": "Sensor API is running!",
+        "status": "active",
+        "timestamp": datetime.now().isoformat()
+    })
 
-@app.route("/latest")
+@app.route("/api/latest")
 def get_latest():
     """Get latest 20 sensor readings"""
     try:
@@ -85,7 +94,7 @@ def get_latest():
         print(f"❌ Error fetching data: {e}")
         return jsonify([])
 
-@app.route("/stats")
+@app.route("/api/stats")
 def get_stats():
     """Get basic statistics about the sensor data"""
     try:
@@ -101,9 +110,31 @@ def get_stats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/health")
+def health_check():
+    """Health check for monitoring"""
+    try:
+        # Test MongoDB connection
+        sensor_collection.find_one()
+        return jsonify({"status": "healthy", "database": "connected"})
+    except Exception as e:
+        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+
+# === ERROR HANDLERS ===
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Endpoint not found"}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Internal server error"}), 500
+
 # === START APPLICATION ===
 if __name__ == '__main__':
     # Start the random data generation thread
     threading.Thread(target=generate_random_sensor_data, daemon=True).start()
-    print("🚀 Starting Flask application with random sensor data generation...")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    print("🚀 Starting Flask API server...")
+    
+    # Use environment port or default to 5000
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host="0.0.0.0", port=port)
