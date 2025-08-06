@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📊 Real-time Sensor Dashboard (MPU6050 Random Data)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body { 
+      font-family: 'Arial', sans-serif; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+    }
+    
+    nav {
+      width: 250px; 
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      color: white;
+      height: 100vh; 
+      padding: 2em 0;
+      flex-shrink: 0;
+      border-right: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    nav h2 {
+      text-align: center;
+      margin-bottom: 2em;
+      font-size: 1.2em;
+      color: #fff;
+      padding: 0 1em;
+    }
+    
+    nav a {
+      display: block; 
+      padding: 1.2em 1.5em; 
+      text-decoration: none; 
+      color: rgba(255, 255, 255, 0.8);
+      transition: all 0.3s ease;
+      border-left: 3px solid transparent;
+      font-weight: 500;
+    }
+    
+    nav a:hover, nav a.active { 
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border-left: 3px solid #4CAF50;
+      transform: translateX(5px);
+    }
+    
+    main {
+      flex-grow: 1; 
+      padding: 2em; 
+      background: rgba(255, 255, 255, 0.95);
+      overflow-y: auto; 
+      height: 100vh;
+      border-radius: 20px 0 0 20px;
+      margin-left: -20px;
+      box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .page-header {
+      margin-bottom: 2em;
+      padding-bottom: 1em;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    
+    .page-header h2 {
+      color: #333;
+      font-size: 2em;
+      margin-bottom: 0.5em;
+    }
+    
+    .stats-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1em;
+      margin-bottom: 2em;
+    }
+    
+    .stat-card {
+      background: linear-gradient(135deg, #4CAF50, #45a049);
+      color: white;
+      padding: 1.5em;
+      border-radius: 10px;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+    }
+    
+    .stat-card h3 {
+      font-size: 2em;
+      margin-bottom: 0.5em;
+    }
+    
+    .stat-card p {
+      opacity: 0.9;
+    }
+    
+    table {
+      width: 100%; 
+      border-collapse: collapse; 
+      margin-top: 1em;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    th, td {
+      padding: 12px 8px; 
+      text-align: center;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    
+    th { 
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white; 
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.9em;
+      letter-spacing: 0.5px;
+    }
+    
+    tbody tr:hover {
+      background-color: #f5f5f5;
+      transform: scale(1.01);
+      transition: all 0.2s ease;
+    }
+    
+    .pagination {
+      margin-top: 2em;
+      text-align: center;
+    }
+    
+    .pagination button {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin: 0 0.5em;
+      border-radius: 25px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    
+    .pagination button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    canvas { 
+      max-width: 100%; 
+      margin: 1em 0 2em 0;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      padding: 1em;
+    }
+    
+    .chart-container {
+      background: white;
+      border-radius: 15px;
+      padding: 1.5em;
+      margin-bottom: 2em;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .chart-container h3 {
+      color: #333;
+      margin-bottom: 1em;
+      font-size: 1.3em;
+      text-align: center;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 2em;
+      color: #666;
+      font-size: 1.1em;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    
+    .status-active {
+      background-color: #4CAF50;
+      animation: pulse 1.5s infinite;
+    }
+    
+    .status-inactive {
+      background-color: #f44336;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+    
+    @media (max-width: 768px) {
+      body {
+        flex-direction: column;
+      }
+      
+      nav {
+        width: 100%;
+        height: auto;
+        padding: 1em 0;
+      }
+      
+      nav a {
+        display: inline-block;
+        margin: 0 0.5em;
+        padding: 0.8em 1em;
+        border-radius: 20px;
+      }
+      
+      main {
+        margin-left: 0;
+        border-radius: 0;
+        height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <h2>🎛️ Sensor Dashboard</h2>
+  <a href="#" onclick="showPage('log')" class="active" id="log-nav">📋 Data Log</a>
+  <a href="#" onclick="showPage('graph')" id="graph-nav">📈 Live Graphs</a>
+  <a href="#" onclick="showPage('stats')" id="stats-nav">📊 Statistics</a>
+</nav>
+
+<main>
+  <!-- Sensor Log Table -->
+  <section id="log-page">
+    <div class="page-header">
+      <h2>📋 Sensor Data Log</h2>
+      <p>Real-time MPU6050 accelerometer and gyroscope readings</p>
+    </div>
+    
+    <div class="stats-cards">
+      <div class="stat-card">
+        <h3 id="total-records">-</h3>
+        <p>Total Records</p>
+      </div>
+      <div class="stat-card">
+        <h3><span class="status-indicator" id="status-dot"></span><span id="status-text">Loading...</span></h3>
+        <p>System Status</p>
+      </div>
+    </div>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th colspan="3">MPU1 Accelerometer (g)</th>
+          <th colspan="3">MPU1 Gyroscope (°/s)</th>
+          <th colspan="3">MPU2 Accelerometer (g)</th>
+          <th colspan="3">MPU2 Gyroscope (°/s)</th>
+        </tr>
+        <tr>
+          <th></th>
+          <th>X</th><th>Y</th><th>Z</th>
+          <th>X</th><th>Y</th><th>Z</th>
+          <th>X</th><th>Y</th><th>Z</th>
+          <th>X</th><th>Y</th><th>Z</th>
+        </tr>
+      </thead>
+      <tbody id="log-table-body">
+        <tr><td colspan="13" class="loading">Loading sensor data...</td></tr>
+      </tbody>
+    </table>
+    
+    <div class="pagination">
+      <button onclick="changePage(-1)" id="prev-btn">&laquo; Previous</button>
+      <span id="page-number">Page 1 of 1</span>
+      <button onclick="changePage(1)" id="next-btn">Next &raquo;</button>
+    </div>
+  </section>
+
+  <!-- Sensor Graphs -->
+  <section id="graph-page" style="display:none">
+    <div class="page-header">
+      <h2>📈 Real-time Sensor Graphs</h2>
+      <p>Live visualization of sensor data streams</p>
+    </div>
+    
+    <div class="chart-container">
+      <h3>🎯 MPU1 - Accelerometer Data</h3>
+      <canvas id="mpu1Accel"></canvas>
+    </div>
+    
+    <div class="chart-container">
+      <h3>🌪️ MPU1 - Gyroscope Data</h3>
+      <canvas id="mpu1Gyro"></canvas>
+    </div>
+    
+    <div class="chart-container">
+      <h3>🎯 MPU2 - Accelerometer Data</h3>
+      <canvas id="mpu2Accel"></canvas>
+    </div>
+    
+    <div class="chart-container">
+      <h3>🌪️ MPU2 - Gyroscope Data</h3>
+      <canvas id="mpu2Gyro"></canvas>
+    </div>
+  </section>
+  
+  <!-- Statistics Page -->
+  <section id="stats-page" style="display:none">
+    <div class="page-header">
+      <h2>📊 System Statistics</h2>
+      <p>Overview of sensor data collection and system performance</p>
+    </div>
+    
+    <div class="stats-cards">
+      <div class="stat-card">
+        <h3 id="stats-total-records">-</h3>
+        <p>Total Records Collected</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="stats-latest-time">-</h3>
+        <p>Latest Reading</p>
+      </div>
+      <div class="stat-card">
+        <h3 id="data-rate">~0.5 Hz</h3>
+        <p>Data Collection Rate</p>
+      </div>
+      <div class="stat-card">
+        <h3>100s</h3>
+        <p>Data Retention Period</p>
+      </div>
+    </div>
+    
+    <div class="chart-container">
+      <h3>📈 Data Collection Overview</h3>
+      <p>This system generates random sensor data simulating two MPU6050 sensors with accelerometer and gyroscope readings. Data is automatically collected every 2 seconds and stored with a 100-second retention period.</p>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const apiBase = "";
+  let allData = [];
+  let currentPage = 1;
+  const rowsPerPage = 10;
+  let maxPages = 1;
+  let charts = {};
+
+  function showPage(id) {
+    // Hide all pages
+    document.getElementById("log-page").style.display = "none";
+    document.getElementById("graph-page").style.display = "none";
+    document.getElementById("stats-page").style.display = "none";
+    
+    // Show selected page
+    document.getElementById(id + "-page").style.display = "block";
+    
+    // Update navigation
+    document.querySelectorAll("nav a").forEach(a => a.classList.remove("active"));
+    document.getElementById(id + "-nav").classList.add("active");
+  }
+
+  async function fetchAndUpdate() {
+    try {
+      const res = await fetch(`${apiBase}/latest`);
+      const latest = await res.json();
+
+      // Update data array
+      latest.forEach(entry => {
+        if (!allData.some(d => d.timestamp === entry.timestamp)) {
+          allData.unshift(entry);
+        }
+      });
+
+      // Keep only latest 500 records
+      if (allData.length > 500) {
+        allData = allData.slice(0, 500);
+      }
+
+      maxPages = Math.ceil(allData.length / rowsPerPage);
+      if (currentPage === 1) renderTable();
+
+      // Update stats
+      await updateStats();
+
+    } catch (err) {
+      console.error("Error fetching latest sensor data:", err);
+    }
+  }
+
+  async function updateStats() {
+    try {
+      const res = await fetch(`${apiBase}/stats`);
+      const stats = await res.json();
+      
+      document.getElementById("total-records").textContent = stats.total_records || 0;
+      document.getElementById("stats-total-records").textContent = stats.total_records || 0;
+      document.getElementById("status-text").textContent = stats.status === 'active' ? 'Active' : 'Inactive';
+      document.getElementById("stats-latest-time").textContent = stats.latest_timestamp ? stats.latest_timestamp.split(' ')[1] : '-';
+      
+      const statusDot = document.getElementById("status-dot");
+      statusDot.className = `status-indicator ${stats.status === 'active' ? 'status-active' : 'status-inactive'}`;
+      
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    }
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById("log-table-body");
+    tbody.innerHTML = "";
+
+    const start = (currentPage - 1) * rowsPerPage;
+    const pageData = allData.slice(start, start + rowsPerPage);
+
+    if (pageData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="13" class="loading">No data available</td></tr>';
+      return;
+    }
+
+    pageData.forEach(d => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${d.timestamp}</strong></td>
+        <td>${d.mpu1_ax}</td><td>${d.mpu1_ay}</td><td>${d.mpu1_az}</td>
+        <td>${d.mpu1_gx}</td><td>${d.mpu1_gy}</td><td>${d.mpu1_gz}</td>
+        <td>${d.mpu2_ax}</td><td>${d.mpu2_ay}</td><td>${d.mpu2_az}</td>
+        <td>${d.mpu2_gx}</td><td>${d.mpu2_gy}</td><td>${d.mpu2_gz}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById("page-number").textContent = `Page ${currentPage} of ${maxPages}`;
+    document.getElementById("prev-btn").disabled = currentPage === 1;
+    document.getElementById("next-btn").disabled = currentPage === maxPages;
+  }
+
+  function changePage(delta) {
+    currentPage += delta;
+    if (currentPage < 1) currentPage = 1;
+    if (currentPage > maxPages) currentPage = maxPages;
+    renderTable();
+  }
+
+  async function updateGraphs() {
+    try {
+      const res = await fetch(`${apiBase}/latest`);
+      const data = await res.json();
+      const labels = data.map(d => d.timestamp);
+
+      const chartDefs = [
+        ["mpu1Accel", ["mpu1_ax", "mpu1_ay", "mpu1_az"], ["#FF6384", "#36A2EB", "#FFCE56"]],
+        ["mpu1Gyro", ["mpu1_gx", "mpu1_gy", "mpu1_gz"], ["#FF9F40", "#FF6384", "#4BC0C0"]],
+        ["mpu2Accel", ["mpu2_ax", "mpu2_ay", "mpu2_az"], ["#9966FF", "#FF99CC", "#99FFCC"]],
+        ["mpu2Gyro", ["mpu2_gx", "mpu2_gy", "mpu2_gz"], ["#FFB366", "#66B2FF", "#B366FF"]]
+      ];
+
+      chartDefs.forEach(([id, fields, colors]) => {
+        const datasets = fields.map((f, i) => ({
+          label: f.replace('_', ' ').toUpperCase(),
+          borderColor: colors[i],
+          backgroundColor: colors[i] + '20',
+          fill: true,
+          tension: 0.4,
+          data: data.map(d => d[f])
+        }));
+
+        if (!charts[id]) {
+          charts[id] = new Chart(document.getElementById(id), {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+              responsive: true,
+              interaction: {
+                intersect: false,
+                mode: 'index'
+              },
+              scales: {
+                y: {
+                  beginAtZero: false,
+                  grid: {
+                    color: 'rgba(0,0,0,0.1)'
+                  }
+                },
+                x: {
+                  grid: {
+                    color: 'rgba(0,0,0,0.1)'
+                  }
+                }
+              },
+              plugins: {
+                legend: {
+                  display: true,
+                  position: 'top'
+                }
+              }
+            }
+          });
+        } else {
+          charts[id].data.labels = labels;
+          charts[id].data.datasets.forEach((ds, i) => {
+            ds.data = data.map(d => d[fields[i]]);
+          });
+          charts[id].update('none');
+        }
+      });
+    } catch (err) {
+      console.error("Error updating graphs:", err);
+    }
+  }
+
+  // Initialize
+  fetchAndUpdate();
+  updateGraphs();
+
+  // Update data every 2 seconds
+  setInterval(() => {
+    fetchAndUpdate();
+    updateGraphs();
+  }, 2000);
+</script>
+</body>
+</html>
